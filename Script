@@ -1,0 +1,104 @@
+### Preamble ###
+# Purpose: Clean the casino survey results data downloaded from Open Data Toronto
+# Author: Wei Zhang
+# Date: April 27 2022
+# Contact: winniewei.zhang@mail.utoronto.ca
+# Pre-req: None
+
+### Workspace Set-Up ###
+library(opendatatoronto)
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(ggpubr)
+library(broom)
+library(car)
+
+### Import the dataset ###
+datase <- read_excel("toronto-casino-survey-results.xlsx")
+data_imp <- tibble(datase$Q1_A, datase$Q2_A, datase$Q3_B, 
+                  datase$Q3_H, datase$Q4_A,
+                  datase$Age, datase$Gender)
+                  
+### Clean data ###
+names(data_imp)[1] = "Attitude"
+names(data_imp)[2] = "Fit"
+names(data_imp)[3] = "Employment"
+names(data_imp)[4] = "Public_safety"
+names(data_imp)[5] = "Revenue"
+names(data_imp)[6] = "Age"
+names(data_imp)[7] = "Sex"
+attach(data_imp)
+data_imp <- na.omit(data_imp)
+data_imp <- data_imp %>% 
+  mutate(Attitude = case_when(
+    Attitude == "Strongly Opposed" ~ 0,
+    Attitude == "Somewhat Opposed" ~ 0,
+    Attitude == "Neutral or Mixed Feelings" ~ 1,
+    Attitude == "Somewhat in Favour" ~ 1,
+    Attitude == "Strongly in Favour" ~ 1
+  ))
+data_imp <- data_imp %>% 
+  mutate(Public_safety = case_when(
+    Public_safety == "Not Important At All" ~ 1,
+    Public_safety == "Unsure" ~ 2,
+    Public_safety == "Somewhat Important" ~ 3,
+    Public_safety == "Very Important" ~ 4
+  ))
+data_imp <- data_imp %>%
+  mutate(`Revenue` = case_when(
+    `Revenue` == "No" ~ 0,
+    `Revenue` == "Don't know" ~ 0,
+    `Revenue` == "Yes" ~ 1
+  ))
+data_imp <- data_imp %>%
+  mutate(Age = case_when(
+    Age == "Under 15" ~ 1,
+    Age == "15-24" ~ 2,
+    Age == "25-34" ~ 3,
+    Age == "35-44" ~ 4,
+    Age == "45-54" ~ 5,
+    Age == "55-64" ~ 6
+  ))
+data_imp <- data_imp %>%
+  mutate(Fit = case_when(
+    Fit == "Does Not Fit My Image At All" ~ 1, 
+    Fit == "Neutral / I am Not Sure" ~ 2,
+    Fit == "Fits Image Somewhat" ~ 3,
+    Fit == "Fits Image Perfectly" ~ 4
+  ))
+data_imp <- data_imp %>%
+  filter(Sex == "Male" | Sex == "Female") %>% 
+  mutate(Sex = case_when(
+    Sex == "Male" ~ 1,
+    Sex == "Female" ~ 0
+  ))
+data_imp <- data_imp %>%
+  mutate(Employment = case_when(
+    Employment == "Not Important At All" ~ 1,
+    Employment == "Unsure" ~ 2,
+    Employment == "Somewhat Important" ~ 3,
+    Employment == "Very Important" ~ 4
+  ))
+  
+### Fit the model ###
+mod1 <- glm(Attitude ~ Fit + Employment + Public_safety + Revenue + Age + Sex, family = binomial, data = data_imp)
+summary(mod1)
+
+### Make the tables ###
+kable(mod1$coefficients, caption = " coefficients of logistic model")
+kable(vif(mod1), caption = "VIF value of all selected variable")
+frame <- data.frame(
+  "Variables" = c("Fit", "Employment", "Public_safety", "Revenue", "Age", "Sex"),
+  "P-value" = c("< 2e-16", "1.13e-14", "4.01e-16", "< 2e-16", "0.448", "0.486"),
+  "Symbol" = c("***", "***", "***", "***", " ", " ")
+)
+kable(frame, caption = "P-value & Relative symbol")
+frame2 <- data.frame(
+  "Symbol" = c(" ", "*", "**", "***"),
+  "P-value" = c("p > 0.05", "p < 0.05", "p < 0.01", "p < 0.001"),
+  "Meaning" = c("insignificance", "significance", "better significance", "powerful significance")
+)
+kable(frame2, caption = "P-value criterion")
+mod2 <- glm(Attitude ~ Fit + Employment + Public_safety + Revenue, family = binomial, data = data_imp)
+summary(mod2)
